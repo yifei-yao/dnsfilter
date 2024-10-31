@@ -19,8 +19,8 @@ struct Args {
     #[clap(short, long, default_value = "denylist.txt")]
     denylist: String,
 
-    /// Upstream DNS server address (e.g., "127.0.0.53:53")
-    #[clap(short, long, default_value = "127.0.0.53:53")]
+    /// Upstream DNS server address (e.g., "1.1.1.1:53")
+    #[clap(short, long, default_value = "1.1.1.1:53")]
     upstream_dns: String,
 }
 
