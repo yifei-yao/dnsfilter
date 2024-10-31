@@ -1,12 +1,27 @@
+use clap::Parser;
 use qfilter::Filter;
 use std::{fs::File, io::BufRead, net::SocketAddr, sync::Arc, time::Duration};
 use tokio::{net::UdpSocket, time::timeout};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let hash_set = read_denylist("denylist.txt")?;
-    start_service(hash_set).await?;
+    let args = Args::parse();
+    let upstream_addr: SocketAddr = args.upstream_dns.parse()?;
+    let hash_set = read_denylist(&args.denylist)?;
+    start_service(hash_set, upstream_addr).await?;
     Ok(())
+}
+
+#[derive(Parser)]
+#[clap(author, version, about)]
+struct Args {
+    /// Path to the denylist file
+    #[clap(short, long, default_value = "denylist.txt")]
+    denylist: String,
+
+    /// Upstream DNS server address (e.g., "127.0.0.53:53")
+    #[clap(short, long, default_value = "127.0.0.53:53")]
+    upstream_dns: String,
 }
 
 struct DomainSet {
@@ -56,20 +71,28 @@ fn read_denylist(path: &str) -> std::io::Result<DomainSet> {
     Ok(filter)
 }
 
-async fn start_service(denylist: DomainSet) -> Result<(), std::io::Error> {
+async fn start_service(
+    denylist: DomainSet,
+    upstream_dns: SocketAddr,
+) -> Result<(), std::io::Error> {
     let denylist = Arc::new(denylist);
     let socket = Arc::new(UdpSocket::bind(("0.0.0.0", 53)).await?);
+    let upstream_dns = Arc::new(upstream_dns.to_owned());
     loop {
         let mut buf = [0u8; 512];
         let (len, src) = socket.recv_from(&mut buf).await?;
         let socket = Arc::clone(&socket);
         let denylist = Arc::clone(&denylist);
+        let upstream_dns = Arc::clone(&upstream_dns);
         tokio::spawn(async move {
-            if let Err(e) =
-                handle_request(&buf[0..len], src, &socket, &denylist).await
-            {
-                eprintln!("Error handling request from {}: {}", src, e);
-            }
+            let _ = handle_request(
+                &buf[0..len],
+                src,
+                &socket,
+                &denylist,
+                &upstream_dns,
+            )
+            .await;
         });
     }
 }
@@ -79,14 +102,14 @@ async fn handle_request(
     source: SocketAddr,
     socket: &UdpSocket,
     denylist: &DomainSet,
+    upstream_dns: &SocketAddr,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let domain = parse_dns_query(request)?;
     if in_denylist(&domain, denylist) {
-        println!("{domain} blocked");
         let response = create_nxdomain_response(request)?;
         socket.send_to(&response, source).await?;
     } else {
-        let response = forward_to_upstream(request).await?;
+        let response = forward_to_upstream(request, upstream_dns).await?;
         socket.send_to(&response, source).await?;
     }
     Ok(())
@@ -155,13 +178,14 @@ fn parse_dns_query(request: &[u8]) -> Result<String, &'static str> {
     Ok(domain)
 }
 
-async fn forward_to_upstream(request: &[u8]) -> Result<Vec<u8>, &'static str> {
-    const UPSTREAM_DNS: &str = "1.1.1.1:53";
-    let upstream_addr: SocketAddr = UPSTREAM_DNS.parse().unwrap();
+async fn forward_to_upstream(
+    request: &[u8],
+    upstream_dns: &SocketAddr,
+) -> Result<Vec<u8>, &'static str> {
     let socket = UdpSocket::bind("0.0.0.0:0").await.unwrap();
 
     socket
-        .send_to(request, upstream_addr)
+        .send_to(request, upstream_dns)
         .await
         .map_err(|_| "Failed to forward")?;
     let mut response_buf = [0u8; 512];
