@@ -32,7 +32,8 @@ impl DomainSet {
 fn read_denylist(path: &str) -> std::io::Result<DomainSet> {
     let file = File::open(path)?;
     let reader = std::io::BufReader::new(file);
-    let mut valid_entry_count = 0;
+
+    let mut entries = Vec::new();
 
     for line in reader.lines() {
         let line = line?;
@@ -42,24 +43,16 @@ fn read_denylist(path: &str) -> std::io::Result<DomainSet> {
         };
         let line = line.trim().to_lowercase();
         if !line.is_empty() {
-            valid_entry_count += 1;
+            entries.push(line);
         }
     }
 
-    let mut filter = DomainSet::new(valid_entry_count);
-    let file = File::open(path)?;
-    let reader = std::io::BufReader::new(file);
-    for line in reader.lines() {
-        let line = line?;
-        let line = match line.split_once('#') {
-            Some((before_comment, _)) => before_comment,
-            None => &line,
-        };
-        let line = line.trim().to_lowercase();
-        if !line.is_empty() {
-            filter.insert(&line);
-        }
+    let mut filter = DomainSet::new(entries.len() as u64);
+
+    for entry in entries {
+        filter.insert(&entry);
     }
+
     Ok(filter)
 }
 
