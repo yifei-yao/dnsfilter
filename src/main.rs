@@ -166,7 +166,7 @@ async fn forward_to_upstream(request: &[u8]) -> Result<Vec<u8>, &'static str> {
         .map_err(|_| "Failed to forward")?;
     let mut response_buf = [0u8; 512];
     let response_size =
-        timeout(Duration::from_secs(3), socket.recv(&mut response_buf))
+        timeout(Duration::from_millis(300), socket.recv(&mut response_buf))
             .await
             .map_err(|_| "Upstream DNS server timeout")?
             .map_err(|_| "Failed to receive response")?;
