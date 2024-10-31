@@ -4,7 +4,7 @@ use tokio::{net::UdpSocket, time::timeout};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let hash_set = Arc::new(read_denylist("denylist.txt")?);
+    let hash_set = read_denylist("denylist.txt")?;
     start_service(hash_set).await?;
     Ok(())
 }
@@ -63,7 +63,8 @@ fn read_denylist(path: &str) -> std::io::Result<DomainSet> {
     Ok(filter)
 }
 
-async fn start_service(denylist: Arc<DomainSet>) -> Result<(), std::io::Error> {
+async fn start_service(denylist: DomainSet) -> Result<(), std::io::Error> {
+    let denylist = Arc::new(denylist);
     let socket = Arc::new(UdpSocket::bind(("0.0.0.0", 53)).await?);
     loop {
         let mut buf = [0u8; 512];
