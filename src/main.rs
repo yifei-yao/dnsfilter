@@ -6,8 +6,8 @@ use tokio::{net::UdpSocket, time::timeout};
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
-    let upstream_addr: SocketAddr = args.upstream_dns.parse()?;
-    let hash_set = read_denylist(&args.denylist)?;
+    let upstream_addr: SocketAddr = args.dns.parse()?;
+    let hash_set = read_denylist(&args.list)?;
     start_service(hash_set, upstream_addr).await?;
     Ok(())
 }
@@ -17,11 +17,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 struct Args {
     /// Path to the denylist file
     #[clap(short, long, default_value = "denylist.txt")]
-    denylist: String,
+    list: String,
 
     /// Upstream DNS server address (e.g., "1.1.1.1:53")
     #[clap(short, long, default_value = "1.1.1.1:53")]
-    upstream_dns: String,
+    dns: String,
 }
 
 struct DomainSet {
